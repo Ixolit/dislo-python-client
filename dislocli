@@ -1,0 +1,18 @@
+#!/usr/bin/python
+
+import sys, Dislo.cli
+
+if __name__ == '__main__':
+    parser = Dislo.cli.ArgumentParser()
+    try:
+        result = parser.parse_and_call(sys.argv)
+        rowfields = 0
+        width = 79
+        for row in result:
+            if not rowfields:
+                rowfields = len(row)
+            for field in row:
+                print str(field).ljust(int(round(width/rowfields))),
+            print
+    except Dislo.cli.ArgumentError as err:
+        print parser.error(str(err))
