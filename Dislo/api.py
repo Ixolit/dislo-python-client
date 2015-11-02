@@ -1,6 +1,6 @@
 #!/usr/bin/python
 
-import json, urllib, httplib, time, hmac, hashlib, pprint
+import json, urllib, httplib, time, hmac, hashlib, csv, StringIO, pprint
 
 
 class HTTPQueryHandler:
@@ -17,7 +17,7 @@ class HTTPQueryHandler:
         """
         self.endpoint = endpoint
         self.api_key = api_key
-        self.password = api_secret
+        self.api_secret = api_secret
 
     def call(self, uri, parameters):
         """
@@ -48,24 +48,42 @@ class HTTPQueryHandler:
 
         signature = response.getheader('X-Signature')
         signature_algorithm = response.getheader('X-Signature-Algorithm')
-        timestamp = response.getheader('X-Signature-Timestamp')
+        timestamp = int(response.getheader('X-Signature-Timestamp'))
 
         if signature_algorithm != 'sha512':
             raise Exception(
                 'Response signature algorithm ' + signature_algorithm + ' does not match request algorithm!')
 
-        hm = hmac.new(self.api_secret, body + '\n\n' + timestamp + '\n' + signature_algorithm, hashlib.sha512)
-        expected_signature = hm.digest()
+        hm = hmac.new(self.api_secret, body + '\n\n' + str(timestamp) + '\n' + signature_algorithm, hashlib.sha512)
+        expected_signature = hm.hexdigest()
 
         if expected_signature != signature:
             raise Exception(
                 'Response signature ' + signature + ' does not match expected signature ' + expected_signature)
 
-        if timestamp < time.time() - 300 or timestamp > time.time() + 300:
-            raise Exception('Response timestamp is out of bounds: ' + timestamp + '. Expected ' +
+        if timestamp < int(time.time()) - 300 or timestamp > int(time.time()) + 300:
+            raise Exception('Response timestamp is out of bounds: ' + str(timestamp) + '. Expected ' +
                             str(time.time() - 300) + ' to ' + str(time.time() + 300))
-
         return body
+
+    def parse_csv(self, data):
+        result = []
+        f = StringIO.StringIO(data)
+        reader = csv.reader(f, delimiter=',')
+        for row in reader:
+            result.append(row)
+        return result
+
+    def parse_csv_header(self, data):
+        data = self.parse_csv(data)
+        header = data.pop(0)
+        result = []
+        for row in data:
+            new_row = {}
+            for idx,field in enumerate(row):
+                new_row[header[idx]] = field
+            result.append(new_row)
+        return result
 
     def custom_report(self, report_id, parameters=None, limit=None, offset=None, order=None):
         """
@@ -82,6 +100,8 @@ class HTTPQueryHandler:
             'offset': offset,
             'order': order
         })
+        return self.parse_csv_header(response)
+
 
     def custom_query(self, sql, parameters=None, limit=None, offset=None, order=None):
         """
@@ -99,3 +119,4 @@ class HTTPQueryHandler:
             'offset': offset,
             'order': order
         })
+        return self.parse_csv_header(response)
